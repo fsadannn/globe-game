@@ -4,7 +4,7 @@ import {
   forwardRef,
   useImperativeHandle,
   useEffect,
-  Suspense,
+  useCallback,
 } from 'react';
 import { Canvas, useLoader, useThree } from '@react-three/fiber';
 import { CameraControls } from '@react-three/drei';
@@ -24,14 +24,20 @@ import {
   computeCentroid,
   Direction,
   direction,
-  earthGeoDistance,
   MAX_EARTH_DISTANCE,
   minDistance,
   normalize,
 } from './geojson/geo-utils';
 import { COUNTRIES_ES } from './coutries';
-import { Minus, Plus } from 'lucide-react';
-import { Vec3D } from './geojson/geo-types';
+import {
+  ArrowBigDown,
+  ArrowBigLeft,
+  ArrowBigRight,
+  ArrowBigUp,
+  Minus,
+  Plus,
+} from 'lucide-react';
+import ReactCountryFlag from 'react-country-flag';
 
 useLoader.preload(TextureLoader, '/earth-day.webp');
 
@@ -68,6 +74,7 @@ type CountrySelection = {
   distance: number;
   dx: Direction;
   dy: Direction;
+  code: string;
 };
 
 interface SceneRef {
@@ -99,6 +106,22 @@ const Scene = forwardRef<SceneRef, SceneProps>(({ country }, ref) => {
           return { ok: false } as CountrySelection;
         }
 
+        console.log(name, country);
+        if (name === country) {
+          let shouldCenter = true;
+          for (const vertex of vertices) {
+            markCountry(vertex, shouldCenter, '#00ff00');
+            shouldCenter = false;
+          }
+          return {
+            ok: true,
+            distance: 0,
+            dx: 0,
+            dy: 0,
+            code: name,
+          } as CountrySelection;
+        }
+
         let distance = Infinity;
         for (const vertex of vertices) {
           for (const vertex2 of vertices2) {
@@ -119,7 +142,13 @@ const Scene = forwardRef<SceneRef, SceneProps>(({ country }, ref) => {
         const centroid2 = normalize(computeCentroid(vertices2[0]));
         const [x, y] = direction(centroid1, centroid2);
 
-        return { ok: false, distance, dx: x, dy: y } as CountrySelection;
+        return {
+          ok: true,
+          distance,
+          dx: x,
+          dy: y,
+          code: name,
+        } as CountrySelection;
       },
       zoom: (value: number) => {
         if (cameraControlsRef.current) {
@@ -235,12 +264,13 @@ const Scene = forwardRef<SceneRef, SceneProps>(({ country }, ref) => {
         }), // inner holes
       ];
       const names = new Map<string, number[][]>();
+
       countries.features.forEach(
         ({
           properties,
           geometry,
         }: {
-          properties: { iso_a3: string };
+          properties: { iso_a2: string };
           geometry: GeoJsonData;
         }) => {
           const geo = new GeoJsonGeometry(geometry, alt);
@@ -250,9 +280,10 @@ const Scene = forwardRef<SceneRef, SceneProps>(({ country }, ref) => {
           for (const g of geo.geoGroups) {
             vertices.push(g.vertices);
           }
-          names.set(properties?.iso_a3, vertices);
+          names.set(properties?.iso_a2, vertices);
         }
       );
+
       countryNames.current = names;
 
       lineObjs.forEach((obj) => scene.add(obj));
@@ -303,13 +334,40 @@ const Scene = forwardRef<SceneRef, SceneProps>(({ country }, ref) => {
   );
 });
 
+const ArrowDirection = ({ dx, dy }: { dx: Direction; dy: Direction }) => {
+  if (dx === 0) {
+    if (dy === 1) {
+      return <ArrowBigUp />;
+    }
+    if (dy === -1) {
+      return <ArrowBigDown />;
+    }
+  }
+
+  if (dy === 0) {
+    if (dx === 1) {
+      return <ArrowBigRight />;
+    }
+    if (dx === -1) {
+      return <ArrowBigLeft />;
+    }
+  }
+
+  const angle = dx === 1 ? -(dy * 45) : -(dy * 45 + 90);
+
+  return <ArrowBigRight style={{ rotate: `${angle}deg` }} />;
+};
+
 const GlobeVisualization = () => {
   const [searchCountry, setSearchCountry] = useState('');
   const sceneRef = useRef<SceneRef | null>(null);
   const [names, setNames] = useState<string[]>([]);
   const namesMap = useRef<Record<string, string>>({});
+  const inverseNamesMap = useRef<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [country, setCountry] = useState<string>('');
+  const [isWin, setIsWin] = useState(false);
+  const [results, setResults] = useState<CountrySelection[]>([]);
 
   const handleSearchCountry = () => {
     if (!sceneRef || !searchCountry) {
@@ -327,67 +385,123 @@ const GlobeVisualization = () => {
       setIsLoading(false);
       return;
     }
+
     setNames((oldNames: string[]) =>
       oldNames.filter((name: string) => name !== cleanSearch)
     );
     setSearchCountry('');
     setIsLoading(false);
+
+    if (isoCountry === country) {
+      setIsWin(true);
+    }
+
+    setResults((values) => {
+      const newValues = [...values, result];
+      newValues.sort((v1, v2) => v1.distance - v2.distance);
+
+      return newValues;
+    });
   };
 
   useEffect(() => {
     namesMap.current = COUNTRIES_ES;
     const countries = Object.keys(namesMap.current);
+    const inverseMap: Record<string, string> = {};
+    for (const country of countries) {
+      inverseMap[namesMap.current[country]] = country;
+    }
+    inverseNamesMap.current = inverseMap;
     setNames(countries);
-    // const randomCountry =
-    //   countries[Math.floor(Math.random() * countries.length)];
-    const randomCountry = 'Zimbabue';
+    const randomCountry =
+      countries[Math.floor(Math.random() * countries.length)];
     setCountry(namesMap.current[randomCountry]);
     console.log(randomCountry, namesMap.current[randomCountry]);
   }, []);
 
-  return (
-    <div className="max-w-4xl mx-auto p-4 bg-white shadow-md rounded-lg">
-      <h2 className="text-2xl font-bold mb-4">Interactive World Globe</h2>
-      <div className="flex space-x-2 mb-4">
-        <AutocompleteInput
-          options={names}
-          className="w-full"
-          setInputValue={setSearchCountry}
-          inputValue={searchCountry}
-        />
-        <button
-          onClick={handleSearchCountry}
-          disabled={isLoading}
-          className="bg-blue-500 text-white px-4 py-1 rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50"
-        >
-          Seleccionar
-        </button>
-      </div>
+  const getPrefix = useCallback((value: string) => {
+    const iso = namesMap.current[value];
 
-      <div className="w-full h-[500px] bg-gray-100 rounded-lg cursor-move relative">
-        <Canvas camera={{ zoom: 3 }}>
-          <Scene ref={sceneRef} country={country} />
-        </Canvas>
-        <div className="w-full absolute top-0">
-          <div className="flex w-full justify-between p-4">
-            <button
-              className="bg-blue-500 text-white px-2 py-1 rounded-md hover:bg-blue-600 transition-colors "
-              onClick={() => {
-                sceneRef.current?.zoom(-0.2);
-              }}
-            >
-              <Minus />
-            </button>
-            <button
-              className="bg-blue-500 text-white px-2 py-1 rounded-md hover:bg-blue-600 transition-colors"
-              onClick={() => {
-                sceneRef.current?.zoom(0.2);
-              }}
-            >
-              <Plus />
-            </button>
+    if (!iso) {
+      return null;
+    }
+
+    return <ReactCountryFlag countryCode={iso} svg />;
+  }, []);
+
+  return (
+    <div className="w-full">
+      <div className="max-w-4xl mx-auto pt-4">
+        <h2 className="text-2xl font-bold">Adivina el País</h2>
+      </div>
+      <div className="max-w-4xl mx-auto p-4 bg-white shadow-md rounded-lg">
+        <div className="flex space-x-2 mb-4">
+          <AutocompleteInput
+            options={names}
+            className="w-full"
+            setInputValue={setSearchCountry}
+            inputValue={searchCountry}
+            disabled={isWin}
+            getPrefix={getPrefix}
+          />
+          <button
+            onClick={handleSearchCountry}
+            disabled={isLoading || isWin}
+            className="bg-blue-500 text-white px-4 py-1 rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50"
+          >
+            Seleccionar
+          </button>
+        </div>
+
+        <div className="w-full h-[500px] bg-gray-100 rounded-lg cursor-move relative">
+          <Canvas camera={{ zoom: 3 }}>
+            <Scene ref={sceneRef} country={country} />
+          </Canvas>
+          <div className="w-full absolute top-0">
+            <div className="flex w-full justify-between p-4">
+              <button
+                className="bg-blue-500 text-white px-2 py-1 rounded-md hover:bg-blue-600 transition-colors "
+                onClick={() => {
+                  sceneRef.current?.zoom(-0.2);
+                }}
+              >
+                <Minus />
+              </button>
+              <button
+                className="bg-blue-500 text-white px-2 py-1 rounded-md hover:bg-blue-600 transition-colors"
+                onClick={() => {
+                  sceneRef.current?.zoom(0.2);
+                }}
+              >
+                <Plus />
+              </button>
+            </div>
           </div>
         </div>
+      </div>
+      <div className="max-w-4xl mx-auto p-4 bg-white shadow-md rounded-lg mt-4 mb-8">
+        <table className="w-full">
+          <thead>
+            <tr>
+              <th className="py-2 text-left">País</th>
+              <th className="py-2 text-left">Distancia</th>
+              <th className="py-2 text-left">Dirección</th>
+            </tr>
+          </thead>
+          <tbody>
+            {results.map((result, index) => (
+              <tr key={index} className="border-t border-gray-300">
+                <td className="py-2">{inverseNamesMap.current[result.code]}</td>
+                <td className="py-2">~{Math.floor(result.distance)} km</td>
+                <td className="py-2">
+                  <div className="border-blue-500 border-2  p-1 rounded-md flex w-8 h-8 ">
+                    <ArrowDirection dx={result.dx} dy={result.dy} />
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );

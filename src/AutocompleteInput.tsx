@@ -5,11 +5,15 @@ const AutocompleteInput = ({
   className,
   setInputValue,
   inputValue,
+  disabled = false,
+  getPrefix,
 }: {
   options: string[];
   className?: string;
   setInputValue?: (value: string) => void;
   inputValue: string;
+  disabled?: boolean;
+  getPrefix?: (value: string) => React.ReactNode;
 }) => {
   const [suggestions, setSuggestions] = useState<string[]>([]);
 
@@ -33,10 +37,11 @@ const AutocompleteInput = ({
     <div className={`relative ${className || ''}`}>
       <input
         type="text"
+        disabled={disabled}
         value={inputValue}
         onChange={handleInputChange}
-        className="flex-grow px-2 py-1 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 w-full"
-        placeholder="Start typing..."
+        className="flex-grow px-2 py-1 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 w-full disabled:bg-gray-300 disabled:opacity-50"
+        placeholder="Nombre de país..."
       />
       {suggestions.length > 0 && (
         <ul className="absolute z-10 w-full border rounded mt-1 max-h-40 overflow-y-auto">
@@ -44,9 +49,9 @@ const AutocompleteInput = ({
             <li
               key={index}
               onClick={() => handleSuggestionClick(suggestion)}
-              className="bg-white p-2 hover:bg-gray-100 cursor-pointer"
+              className="bg-white p-2 hover:bg-gray-100 cursor-pointer flex items-center gap-2"
             >
-              {suggestion}
+              {getPrefix?.(suggestion)} {suggestion}
             </li>
           ))}
         </ul>

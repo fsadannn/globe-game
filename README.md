@@ -6,4 +6,4 @@ You can play the game by running the application and using the mouse to rotate t
 
 The game is written in TypeScript and uses the Three.js library to render the globe. The country data is from the Natural Earth dataset.
 
-The application is hosted on GitHub Pages and can be accessed at [https://globe.fsadannn.com](https://globe.fsadannn.com).
+The application can be accessed at [https://globe.fsadannn.com](https://globe.fsadannn.com).

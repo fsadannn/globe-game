@@ -270,5 +270,5 @@ export function direction(v1: Vec3D, v2: Vec3D): [Direction, Direction] {
     }
   }
 
-  return [x, y];
+  return [x as Direction, y as Direction];
 }

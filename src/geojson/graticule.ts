@@ -1,3 +1,6 @@
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-nocheck
+
 /** from d3-array */
 function range(start, stop, step) {
   (start = +start),

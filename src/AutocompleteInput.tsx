@@ -17,7 +17,7 @@ const AutocompleteInput = ({
 }) => {
   const [suggestions, setSuggestions] = useState<string[]>([]);
 
-  const handleInputChange = (e) => {
+  const handleInputChange = (e: { target: { value: string } }) => {
     const value = e.target.value;
     setInputValue?.(value);
 

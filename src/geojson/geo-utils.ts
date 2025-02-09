@@ -1,3 +1,4 @@
+import { cross } from 'three/tsl';
 import { GeoCoord, Vec2D, Vec3D } from './geo-types';
 
 const radians = Math.PI / 180;
@@ -114,4 +115,75 @@ export function flatten(data: number[][][]) {
     prevLen = ring.length;
   }
   return { vertices, holes, dimensions };
+}
+
+function dot(a: Vec3D, b: Vec3D): number {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+function norm(x: Vec3D) {
+  return Math.sqrt(dot(x, x));
+}
+
+function crossProduct(a: Vec3D, b: Vec3D): Vec3D {
+  return [
+    a[1] * b[2] - a[2] * b[1],
+    a[2] * b[0] - a[0] * b[2],
+    a[0] * b[1] - a[1] * b[0],
+  ];
+}
+
+function sum(a: Vec3D, b: Vec3D): Vec3D {
+  return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+}
+
+function sub(a: Vec3D, b: Vec3D): Vec3D {
+  return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+}
+
+function angleBetweenVectors(u: Vec3D, v: Vec3D) {
+  if (dot(u, v) < 0) {
+    return Math.PI - 2 * Math.asin(norm(sum(u, v)) / 2);
+  }
+
+  return 2 * Math.asin(norm(sub(v, u)) / 2);
+}
+
+function normalize(x: Vec3D): Vec3D {
+  const normV: number = norm(x);
+  return [x[0] / normV, x[1] / normV, x[2] / normV];
+}
+
+export function computeCentroid(vertices: number[]) {
+  const moment: Vec3D = [0, 0, 0];
+
+  for (let i = 0; i < vertices.length; i += 3) {
+    const a: Vec3D = [vertices[i], vertices[i + 1], vertices[i + 2]];
+    const b: Vec3D = [
+      vertices[(i + 3) % vertices.length],
+      vertices[(i + 4) % vertices.length],
+      vertices[(i + 5) % vertices.length],
+    ];
+    if (norm(sub(a, b)) < 1e-6) {
+      continue;
+    }
+
+    const axb: Vec3D = normalize(crossProduct(a, b));
+    const angle: number = angleBetweenVectors(a, b) / 2;
+    moment[0] += axb[0] * angle;
+    moment[1] += axb[1] * angle;
+    moment[2] += axb[2] * angle;
+    console.log(axb, angle, moment);
+  }
+
+  if (
+    angleBetweenVectors(moment, [vertices[0], vertices[1], vertices[2]]) >
+    Math.PI / 2
+  ) {
+    moment[0] = -moment[0];
+    moment[1] = -moment[1];
+    moment[2] = -moment[2];
+  }
+
+  return moment;
 }

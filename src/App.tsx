@@ -6,6 +6,7 @@ import {
   useEffect,
 } from 'react';
 import { Canvas, useLoader, useThree } from '@react-three/fiber';
+import { CameraControls } from '@react-three/drei';
 import {
   TextureLoader,
   LineSegments,
@@ -15,10 +16,15 @@ import {
   Raycaster,
   Quaternion,
   Euler,
+  type Camera,
+  Matrix4,
+  Spherical,
 } from 'three';
 import AutocompleteInput from './AutocompleteInput';
-import { GeoJsonGeometry } from './geojson';
+import { GeoJsonData, GeoJsonGeometry } from './geojson';
 import { graticule10 } from './geojson/graticule';
+import { Vec3D } from './geojson/geo-types';
+import { computeCentroid } from './geojson/geo-utils';
 
 useLoader.preload(TextureLoader, '/earth-day.webp');
 
@@ -36,12 +42,12 @@ interface SceneProps {
 const Scene = forwardRef<SceneRef, SceneProps>(({ setNames }, ref) => {
   const globeMap = useLoader(TextureLoader, '/earth-day.webp');
   const isDragging = useRef<boolean>(false);
-  const previousMousePosition = useRef({ x: 0, y: 0 });
   const scene = useThree((state) => state.scene);
   const isLoading = useRef(false);
   const meshRef = useRef<Mesh>(null);
   const paintCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const countryNames = useRef<Map<string, number[][]>>(new Map());
+  const cameraControlsRef = useRef<CameraControls | null>(null);
 
   useImperativeHandle(
     ref,
@@ -51,9 +57,11 @@ const Scene = forwardRef<SceneRef, SceneProps>(({ setNames }, ref) => {
       },
       selectCountry: (name: string) => {
         const vertices = countryNames.current.get(name);
+        let shouldCenter = true;
         if (vertices) {
           for (const vertex of vertices) {
-            markCountry(vertex);
+            markCountry(vertex, shouldCenter);
+            shouldCenter = false;
           }
 
           return true;
@@ -65,7 +73,22 @@ const Scene = forwardRef<SceneRef, SceneProps>(({ setNames }, ref) => {
     []
   );
 
-  const markCountry = (vertices: number[]) => {
+  const rotateToPoint = (point: Vector3) => {
+    if (!cameraControlsRef.current) return;
+
+    // Convert the point to spherical coordinates
+    const spherical = new Spherical();
+    spherical.setFromVector3(point);
+
+    // Only rotate the camera using azimuthal and polar angles
+    cameraControlsRef.current.rotateTo(
+      spherical.theta, // azimuthal angle (around y-axis)
+      spherical.phi, // polar angle (from y-axis)
+      true // enable smooth transition
+    );
+  };
+
+  const markCountry = (vertices: number[], shouldCenter = false) => {
     if (!meshRef.current || !paintCanvasRef.current) return;
 
     const ctx = paintCanvasRef.current.getContext('2d');
@@ -76,8 +99,6 @@ const Scene = forwardRef<SceneRef, SceneProps>(({ setNames }, ref) => {
 
     ctx.beginPath();
 
-    let v = new Vector3(0, 0, 0);
-    let p = new Vector3(0, 0, 0);
     // Get the scene's transformation matrix
     const sceneMatrix = scene.matrixWorld;
 
@@ -98,13 +119,11 @@ const Scene = forwardRef<SceneRef, SceneProps>(({ setNames }, ref) => {
       }
       const it = ray.intersectObject(meshRef.current, false);
       if (it.length === 0) continue;
-      const x = it[0].uv.x * width;
-      const y = (1 - it[0].uv.y) * height;
+      const x = it[0].uv!.x * width;
+      const y = (1 - it[0].uv!.y) * height;
 
       if (i === 0) {
         ctx.moveTo(x, y);
-        v = dir;
-        p = point;
       } else {
         ctx.lineTo(x, y);
       }
@@ -116,22 +135,20 @@ const Scene = forwardRef<SceneRef, SceneProps>(({ setNames }, ref) => {
 
     globeMap.needsUpdate = true;
 
-    // const wd = scene.getWorldDirection(p);
-    // wd.normalize();
-    // v.normalize();
-    // const quaternion = new Quaternion();
-    // quaternion.setFromUnitVectors(wd, v);
-
-    // // Convert the quaternion to Euler angles
-    // const euler = new Euler();
-    // euler.setFromQuaternion(quaternion);
-    // scene.rotation.x = euler.x;
-    // scene.rotation.y = euler.y;
-    // scene.rotation.z = euler.z;
+    if (!shouldCenter || !cameraControlsRef) {
+      return;
+    }
+    const centroid = computeCentroid(vertices);
+    let pointV = new Vector3(centroid[0], centroid[1], centroid[2]);
+    pointV = pointV.normalize();
+    rotateToPoint(pointV);
+    // Rotate the scene so the camera points out to pointV at the center
   };
 
   useEffect(() => {
-    if (isLoading.current) return;
+    if (isLoading.current) {
+      return;
+    }
 
     const loadGeoJson = async () => {
       const response = await fetch('/world.geo.json');
@@ -139,7 +156,7 @@ const Scene = forwardRef<SceneRef, SceneProps>(({ setNames }, ref) => {
 
       const alt = 1.001;
 
-      const lineObjs = [
+      const lineObjs: LineSegments[] = [
         new LineSegments(
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           new GeoJsonGeometry(graticule10() as any, alt),
@@ -158,16 +175,24 @@ const Scene = forwardRef<SceneRef, SceneProps>(({ setNames }, ref) => {
         }), // inner holes
       ];
       const names = new Map<string, number[][]>();
-      countries.features.forEach(({ properties, geometry }) => {
-        const geo = new GeoJsonGeometry(geometry, alt);
-        const seg = new LineSegments(geo, materials);
-        lineObjs.push(seg);
-        const vertices = [];
-        for (const g of geo.geoGroups) {
-          vertices.push(g.vertices);
+      countries.features.forEach(
+        ({
+          properties,
+          geometry,
+        }: {
+          properties: { name_es: string };
+          geometry: GeoJsonData;
+        }) => {
+          const geo = new GeoJsonGeometry(geometry, alt);
+          const seg = new LineSegments(geo, materials);
+          lineObjs.push(seg);
+          const vertices = [];
+          for (const g of geo.geoGroups) {
+            vertices.push(g.vertices);
+          }
+          names.set(properties?.name_es, vertices);
         }
-        names.set(properties?.name_es, vertices);
-      });
+      );
       countryNames.current = names;
 
       lineObjs.forEach((obj) => scene.add(obj));
@@ -193,6 +218,12 @@ const Scene = forwardRef<SceneRef, SceneProps>(({ setNames }, ref) => {
       meshRef.current.rotation.set(0, -Math.PI / 2, 0); // Rotate 45° on X and Y
     }
 
+    if (cameraControlsRef.current) {
+      // Optional: Configure other control parameters
+      cameraControlsRef.current.smoothTime = 0.25; // Transition time in seconds
+      cameraControlsRef.current.draggingSmoothTime = 0.15; // Smoothness when dragging
+    }
+
     isLoading.current = true;
     loadGeoJson().finally(() => {
       setNames(Array.from(countryNames.current.keys()));
@@ -200,57 +231,10 @@ const Scene = forwardRef<SceneRef, SceneProps>(({ setNames }, ref) => {
     });
   }, []);
 
-  const onWheel = ({ deltaY, camera }) => {
-    const newPosition = camera.position.z + deltaY * 0.002;
-
-    camera.position.z = Math.max(1.3, Math.min(newPosition, 5));
-  };
-
-  const onMouseMove = ({ offsetX, offsetY }) => {
-    if (!isDragging.current) return;
-
-    const deltaMove = {
-      x: offsetX - previousMousePosition.current.x,
-      y: offsetY - previousMousePosition.current.y,
-    };
-
-    // Horizontal rotation (Y-axis)
-    scene.rotation.y += deltaMove.x * 0.01 * ROTATION_SPEED;
-
-    // Vertical rotation (X-axis), with angle limit
-    scene.rotation.x += deltaMove.y * 0.01 * ROTATION_SPEED;
-    scene.rotation.x = Math.max(
-      -Math.PI / 2,
-      Math.min(Math.PI / 2, scene.rotation.x)
-    );
-
-    previousMousePosition.current = {
-      x: offsetX,
-      y: offsetY,
-    };
-  };
-
-  const onMouseDown = ({ offsetX, offsetY }) => {
-    isDragging.current = true;
-    previousMousePosition.current = {
-      x: offsetX,
-      y: offsetY,
-    };
-  };
-
-  const onMouseUp = () => {
-    isDragging.current = false;
-  };
-
   return (
     <>
-      <mesh
-        onWheel={onWheel}
-        onPointerDown={onMouseDown}
-        onPointerMove={onMouseMove}
-        onPointerUp={onMouseUp}
-        ref={meshRef}
-      >
+      <CameraControls ref={cameraControlsRef} minDistance={2} maxDistance={5} />
+      <mesh ref={meshRef}>
         <sphereGeometry args={[1, 64, 64]} />
         <meshBasicMaterial map={globeMap} />
       </mesh>
@@ -304,15 +288,7 @@ const GlobeVisualization = () => {
         </p>
       )}
       <div className="w-full h-[500px] bg-gray-100 rounded-lg cursor-move">
-        <Canvas
-          onMouseDown={() => {
-            sceneRef.current?.setIsDragging(true);
-          }}
-          onMouseUp={() => {
-            sceneRef.current?.setIsDragging(false);
-          }}
-          camera={{ zoom: 3 }}
-        >
+        <Canvas camera={{ zoom: 3 }}>
           <Scene ref={sceneRef} setNames={setNames} />
         </Canvas>
       </div>

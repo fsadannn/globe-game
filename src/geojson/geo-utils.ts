@@ -1,9 +1,10 @@
-import { cross } from 'three/tsl';
 import { GeoCoord, Vec2D, Vec3D } from './geo-types';
 
 const radians = Math.PI / 180;
 const degrees = 180 / Math.PI;
 const PI_2 = Math.PI / 2;
+const EARTH_RADIO = 6371;
+export const MAX_EARTH_DISTANCE = 6371 * Math.PI;
 
 function asin(x: number): number {
   if (x > 1) {
@@ -29,7 +30,19 @@ export function polar2Cartesian(lat: number, lng: number, r = 0): Vec3D {
     r * Math.sin(phi) * Math.sin(theta), // z
   ];
 }
-/** This function is based on d3-geo but with some changes and typing */
+
+export function cartesianToPolar(
+  x: number,
+  y: number,
+  z: number
+): [number, number, number] {
+  const r = Math.sqrt(x * x + y * y + z * z);
+  const phi = Math.acos(y / r);
+  const lat = 90 - (phi * 180) / Math.PI;
+  const lng = 90 - (Math.acos(x / (r * Math.sin(phi))) * 180) / Math.PI;
+  return [lat, lng, r];
+}
+
 export function geoInterpolate(a: GeoCoord, b: GeoCoord) {
   const x0 = a[0] * radians;
   const y0 = a[1] * radians;
@@ -96,7 +109,6 @@ export function interpolateNumber(a: number, b: number) {
   );
 }
 
-/** taken from earcut js */
 export function flatten(data: number[][][]) {
   const vertices: number[] = [];
   const holes: number[] = [];
@@ -149,7 +161,7 @@ function angleBetweenVectors(u: Vec3D, v: Vec3D) {
   return 2 * Math.asin(norm(sub(v, u)) / 2);
 }
 
-function normalize(x: Vec3D): Vec3D {
+export function normalize(x: Vec3D): Vec3D {
   const normV: number = norm(x);
   return [x[0] / normV, x[1] / normV, x[2] / normV];
 }
@@ -173,7 +185,6 @@ export function computeCentroid(vertices: number[]) {
     moment[0] += axb[0] * angle;
     moment[1] += axb[1] * angle;
     moment[2] += axb[2] * angle;
-    console.log(axb, angle, moment);
   }
 
   if (
@@ -186,4 +197,78 @@ export function computeCentroid(vertices: number[]) {
   }
 
   return moment;
+}
+
+export function earthGeoDistance(a: Vec3D, b: Vec3D) {
+  return angleBetweenVectors(a, b) * EARTH_RADIO;
+}
+
+export function minDistance(vertices1: number[], vertices2: number[]): number {
+  const v2Initial: Vec3D = [vertices2[0], vertices2[1], vertices2[2]];
+
+  let minV1Vertex: Vec3D = [vertices1[0], vertices1[1], vertices1[2]];
+  let minDistance: number = Infinity;
+  for (let i = 0; i < vertices1.length; i += 3) {
+    const a: Vec3D = [vertices1[i], vertices1[i + 1], vertices1[i + 2]];
+    const distance = earthGeoDistance(a, v2Initial);
+    if (distance < minDistance) {
+      minDistance = distance;
+      minV1Vertex = a;
+    }
+  }
+
+  for (let i = 0; i < vertices2.length; i += 3) {
+    const a: Vec3D = [vertices2[i], vertices2[i + 1], vertices2[i + 2]];
+    const distance = earthGeoDistance(a, minV1Vertex);
+    if (distance < minDistance) {
+      minDistance = distance;
+    }
+  }
+
+  return minDistance;
+}
+
+export type Direction = 0 | 1 | -1;
+
+export function direction(v1: Vec3D, v2: Vec3D): [Direction, Direction] {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [lat1, lon1, _] = cartesianToPolar(v1[0], v1[1], v1[2]);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [lat2, lon2, __] = cartesianToPolar(v2[0], v2[1], v2[2]);
+  const lat1Min = lat1 - 5;
+  const lat1Max = lat1 + 5;
+  const lon1Min = lon1 - 5;
+  const lon1Max = lon1 + 5;
+
+  console.log(lat1, lon1);
+  console.log([lat1Min, lat1Max], [lon1Min, lon1Max]);
+  console.log(lat2, lon2);
+
+  let x = 0;
+  let y = 0;
+
+  if (lat2 > lat1Max) {
+    y = 1;
+  } else if (lat2 < lat1Min) {
+    y = -1;
+  }
+
+  if (lon2 > lon1Max) {
+    x = 1;
+  } else if (lon2 < lon1Min) {
+    x = -1;
+  }
+
+  if (x == 0 && y == 0) {
+    const yd = Math.abs(lat1 - lat2);
+    const xd = Math.abs(lon1 - lon2);
+
+    if (xd < yd) {
+      y = lat1 > lat2 ? -1 : 1;
+    } else {
+      x = lon1 > lon2 ? -1 : 1;
+    }
+  }
+
+  return [x, y];
 }

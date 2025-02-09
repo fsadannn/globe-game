@@ -20,7 +20,7 @@ function range(start, stop, step) {
   return range;
 }
 
-/** ported from d3-geo to be self contained */
+/** ported from d3-geo to be self contained and some fixes to get soft graticule */
 const epsilon = 1e-6;
 
 function graticuleX(y0, y1, dy) {
@@ -154,9 +154,9 @@ export default function graticule() {
   graticule.precision = function (_) {
     if (!arguments.length) return precision;
     precision = +_;
-    x = graticuleX(y0, y1, 90);
+    x = graticuleX(y0, y1, precision);
     y = graticuleY(x0, x1, precision);
-    X = graticuleX(Y0, Y1, 90);
+    X = graticuleX(Y0, Y1, precision);
     Y = graticuleY(X0, X1, precision);
     return graticule;
   };
@@ -167,8 +167,8 @@ export default function graticule() {
       [180, 90 - epsilon],
     ])
     .extentMinor([
-      [-180, -80 - epsilon],
-      [180, 80 + epsilon],
+      [-180, -90 - epsilon],
+      [180, 90 + epsilon],
     ]);
 }
 

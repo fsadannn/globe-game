@@ -1,50 +1,9 @@
-# React + TypeScript + Vite
+# Guess the Country
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A simple game where you have to guess the country given a partial map of it. The country is randomly selected from a list of all countries in the world.
 
-Currently, two official plugins are available:
+You can play the game by running the application and using the mouse to rotate the globe and zoom in and out. To make a guess, simply type the name of the country in the input field at the top of the screen and press enter. The application will then tell you if your guess was correct or not.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+The game is written in TypeScript and uses the Three.js library to render the globe. The country data is from the Natural Earth dataset.
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
-
-- Configure the top-level `parserOptions` property like this:
-
-```js
-export default tseslint.config({
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
-```
-
-- Replace `tseslint.configs.recommended` to `tseslint.configs.recommendedTypeChecked` or `tseslint.configs.strictTypeChecked`
-- Optionally add `...tseslint.configs.stylisticTypeChecked`
-- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and update the config:
-
-```js
-// eslint.config.js
-import react from 'eslint-plugin-react'
-
-export default tseslint.config({
-  // Set the react version
-  settings: { react: { version: '18.3' } },
-  plugins: {
-    // Add the react plugin
-    react,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended rules
-    ...react.configs.recommended.rules,
-    ...react.configs['jsx-runtime'].rules,
-  },
-})
-```
+The application is hosted on GitHub Pages and can be accessed at [https://globe.fsadannn.com](https://globe.fsadannn.com).

@@ -112,6 +112,7 @@ const Scene = forwardRef<SceneRef, SceneProps>(({ country }, ref) => {
   const paintCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const countryNames = useRef<Map<string, number[][]>>(new Map());
   const cameraControlsRef = useRef<CameraControls | null>(null);
+  const isInit = useRef<boolean>(false);
 
   useImperativeHandle(
     ref,
@@ -255,7 +256,7 @@ const Scene = forwardRef<SceneRef, SceneProps>(({ country }, ref) => {
   };
 
   useEffect(() => {
-    if (isLoading.current || !globeMap) {
+    if (isLoading.current || !globeMap || isInit.current) {
       return;
     }
 
@@ -338,6 +339,7 @@ const Scene = forwardRef<SceneRef, SceneProps>(({ country }, ref) => {
 
     isLoading.current = true;
     loadGeoJson().finally(() => {
+      isInit.current = true;
       isLoading.current = false;
     });
   }, [globeMap]);

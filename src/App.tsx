@@ -7,7 +7,7 @@ import {
   useCallback,
 } from 'react';
 import { Canvas, useLoader, useThree } from '@react-three/fiber';
-import { CameraControls } from '@react-three/drei';
+import { CameraControls, useTexture } from '@react-three/drei';
 import {
   TextureLoader,
   LineSegments,
@@ -16,6 +16,7 @@ import {
   Mesh,
   Raycaster,
   Spherical,
+  Texture,
 } from 'three';
 import AutocompleteInput from './AutocompleteInput';
 import { GeoJsonData, GeoJsonGeometry } from './geojson';
@@ -25,8 +26,8 @@ import {
   Direction,
   direction,
   MAX_EARTH_DISTANCE,
+  MinDistance,
   minDistance,
-  normalize,
 } from './geojson/geo-utils';
 import { COUNTRIES_ES } from './coutries';
 import {
@@ -51,12 +52,25 @@ function linearScale(value: number): string {
 
   const colors = [
     '#E5F392',
-    '#E2D983',
-    '#DFBE73',
-    '#DCA464',
-    '#D98955',
-    '#D66F46',
-    '#D35436',
+    '#E4E98C',
+    '#E3E087',
+    '#E2D681',
+    '#E1CC7B',
+    '#DFC276',
+    '#DFC276',
+    '#DEB970',
+    '#DDAF6B',
+    '#DCA565',
+    '#DB9B5F',
+    '#DA925A',
+    '#D98854',
+    '#D87E4E',
+    '#D77449',
+    '#D66B43',
+    '#D4613E',
+    '#D35738',
+    '#D24D32',
+    '#D1442D',
     '#D03A27',
   ].reverse();
 
@@ -87,7 +101,11 @@ interface SceneProps {
 }
 
 const Scene = forwardRef<SceneRef, SceneProps>(({ country }, ref) => {
-  const globeMap = useLoader(TextureLoader, '/earth-day.webp');
+  // const globeMap = useLoader(TextureLoader, '/earth-day.webp');
+  useTexture('/earth-day.webp', (texture) => {
+    setGlobeMap(texture);
+  });
+  const [globeMap, setGlobeMap] = useState<Texture | undefined>(undefined);
   const scene = useThree((state) => state.scene);
   const isLoading = useRef(false);
   const meshRef = useRef<Mesh>(null);
@@ -106,7 +124,6 @@ const Scene = forwardRef<SceneRef, SceneProps>(({ country }, ref) => {
           return { ok: false } as CountrySelection;
         }
 
-        console.log(name, country);
         if (name === country) {
           let shouldCenter = true;
           for (const vertex of vertices) {
@@ -123,9 +140,14 @@ const Scene = forwardRef<SceneRef, SceneProps>(({ country }, ref) => {
         }
 
         let distance = Infinity;
+        let minDistanceResult: MinDistance | undefined = undefined;
         for (const vertex of vertices) {
           for (const vertex2 of vertices2) {
-            distance = Math.min(distance, minDistance(vertex2, vertex));
+            const d = minDistance(vertex2, vertex);
+            if (d.distance < distance) {
+              distance = d.distance;
+              minDistanceResult = d;
+            }
           }
         }
 
@@ -138,9 +160,7 @@ const Scene = forwardRef<SceneRef, SceneProps>(({ country }, ref) => {
           shouldCenter = false;
         }
 
-        const centroid1 = normalize(computeCentroid(vertices[0]));
-        const centroid2 = normalize(computeCentroid(vertices2[0]));
-        const [x, y] = direction(centroid1, centroid2);
+        const [x, y] = direction(minDistanceResult!.v2, minDistanceResult!.v1);
 
         return {
           ok: true,
@@ -156,7 +176,7 @@ const Scene = forwardRef<SceneRef, SceneProps>(({ country }, ref) => {
         }
       },
     }),
-    [country]
+    [country, globeMap]
   );
 
   const rotateToPoint = (point: Vector3) => {
@@ -223,7 +243,7 @@ const Scene = forwardRef<SceneRef, SceneProps>(({ country }, ref) => {
     ctx.fillStyle = color;
     ctx.fill();
 
-    globeMap.needsUpdate = true;
+    globeMap!.needsUpdate = true;
 
     if (!shouldCenter || !cameraControlsRef) {
       return;
@@ -235,7 +255,7 @@ const Scene = forwardRef<SceneRef, SceneProps>(({ country }, ref) => {
   };
 
   useEffect(() => {
-    if (isLoading.current) {
+    if (isLoading.current || !globeMap) {
       return;
     }
 
@@ -320,7 +340,7 @@ const Scene = forwardRef<SceneRef, SceneProps>(({ country }, ref) => {
     loadGeoJson().finally(() => {
       isLoading.current = false;
     });
-  }, []);
+  }, [globeMap]);
 
   return (
     <>
@@ -368,6 +388,7 @@ const GlobeVisualization = () => {
   const [country, setCountry] = useState<string>('');
   const [isWin, setIsWin] = useState(false);
   const [results, setResults] = useState<CountrySelection[]>([]);
+  const [shouldRender, setShouldRender] = useState(true);
 
   const handleSearchCountry = () => {
     if (!sceneRef || !searchCountry) {
@@ -404,7 +425,7 @@ const GlobeVisualization = () => {
     });
   };
 
-  useEffect(() => {
+  const _init = () => {
     namesMap.current = COUNTRIES_ES;
     const countries = Object.keys(namesMap.current);
     const inverseMap: Record<string, string> = {};
@@ -415,8 +436,25 @@ const GlobeVisualization = () => {
     setNames(countries);
     const randomCountry =
       countries[Math.floor(Math.random() * countries.length)];
+
     setCountry(namesMap.current[randomCountry]);
-    console.log(randomCountry, namesMap.current[randomCountry]);
+  };
+
+  const resetGame = () => {
+    setShouldRender(false);
+
+    setTimeout(() => {
+      setIsWin(false);
+      setResults([]);
+      _init();
+      setTimeout(() => {
+        setShouldRender(true);
+      }, 1000);
+    }, 1000);
+  };
+
+  useEffect(() => {
+    _init();
   }, []);
 
   const getPrefix = useCallback((value: string) => {
@@ -429,10 +467,26 @@ const GlobeVisualization = () => {
     return <ReactCountryFlag countryCode={iso} svg />;
   }, []);
 
+  if (!shouldRender) {
+    return (
+      <div className="w-full h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500" />
+      </div>
+    );
+  }
+
   return (
     <div className="w-full">
-      <div className="max-w-4xl mx-auto pt-4">
+      <div className="max-w-4xl mx-auto pt-4 flex justify-between">
         <h2 className="text-2xl font-bold">Adivina el País</h2>
+        {isWin && (
+          <button
+            onClick={resetGame}
+            className="bg-blue-500 text-white px-4 py-1 rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50"
+          >
+            Reiniciar
+          </button>
+        )}
       </div>
       <div className="max-w-4xl mx-auto p-4 bg-white shadow-md rounded-lg">
         <div className="flex space-x-2 mb-4">
@@ -457,6 +511,7 @@ const GlobeVisualization = () => {
           <Canvas camera={{ zoom: 3 }}>
             <Scene ref={sceneRef} country={country} />
           </Canvas>
+
           <div className="w-full absolute top-0">
             <div className="flex w-full justify-between p-4">
               <button

@@ -203,7 +203,12 @@ export function earthGeoDistance(a: Vec3D, b: Vec3D) {
   return angleBetweenVectors(a, b) * EARTH_RADIO;
 }
 
-export function minDistance(vertices1: number[], vertices2: number[]): number {
+export type MinDistance = { distance: number; v1: Vec3D; v2: Vec3D };
+
+export function minDistance(
+  vertices1: number[],
+  vertices2: number[]
+): MinDistance {
   const v2Initial: Vec3D = [vertices2[0], vertices2[1], vertices2[2]];
 
   let minV1Vertex: Vec3D = [vertices1[0], vertices1[1], vertices1[2]];
@@ -217,15 +222,17 @@ export function minDistance(vertices1: number[], vertices2: number[]): number {
     }
   }
 
+  let minV2Vertex: Vec3D = [vertices2[0], vertices2[1], vertices2[2]];
   for (let i = 0; i < vertices2.length; i += 3) {
     const a: Vec3D = [vertices2[i], vertices2[i + 1], vertices2[i + 2]];
     const distance = earthGeoDistance(a, minV1Vertex);
     if (distance < minDistance) {
       minDistance = distance;
+      minV2Vertex = a;
     }
   }
 
-  return minDistance;
+  return { distance: minDistance, v1: minV1Vertex, v2: minV2Vertex };
 }
 
 export type Direction = 0 | 1 | -1;
@@ -239,10 +246,6 @@ export function direction(v1: Vec3D, v2: Vec3D): [Direction, Direction] {
   const lat1Max = lat1 + 5;
   const lon1Min = lon1 - 5;
   const lon1Max = lon1 + 5;
-
-  console.log(lat1, lon1);
-  console.log([lat1Min, lat1Max], [lon1Min, lon1Max]);
-  console.log(lat2, lon2);
 
   let x = 0;
   let y = 0;

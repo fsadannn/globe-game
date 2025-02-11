@@ -392,12 +392,12 @@ const GlobeVisualization = () => {
   const [results, setResults] = useState<CountrySelection[]>([]);
   const [shouldRender, setShouldRender] = useState(true);
 
-  const handleSearchCountry = () => {
+  const handleSearchCountry = (suggestCountry?: string) => {
     if (!sceneRef || !searchCountry) {
       return;
     }
 
-    const cleanSearch = searchCountry.trim();
+    const cleanSearch = suggestCountry?.trim() || searchCountry.trim();
     const isoCountry = namesMap.current[cleanSearch];
     setIsLoading(true);
     const result = isoCountry
@@ -455,6 +455,12 @@ const GlobeVisualization = () => {
     }, 1000);
   };
 
+  const quit = () => {
+    setSearchCountry(inverseNamesMap.current[country] || country);
+    console.log(inverseNamesMap.current[country] || country);
+    handleSearchCountry(inverseNamesMap.current[country] || country);
+  };
+
   useEffect(() => {
     _init();
   }, []);
@@ -483,6 +489,7 @@ const GlobeVisualization = () => {
         <h2 className="text-2xl font-bold">Adivina el País</h2>
         {isWin && (
           <button
+            type="button"
             onClick={resetGame}
             className="bg-blue-500 text-white px-4 py-1 rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50"
           >
@@ -501,7 +508,10 @@ const GlobeVisualization = () => {
             getPrefix={getPrefix}
           />
           <button
-            onClick={handleSearchCountry}
+            type="button"
+            onClick={() => {
+              handleSearchCountry();
+            }}
             disabled={isLoading || isWin}
             className="bg-blue-500 text-white px-4 py-1 rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50"
           >
@@ -517,6 +527,7 @@ const GlobeVisualization = () => {
           <div className="w-full absolute top-0">
             <div className="flex w-full justify-between p-4">
               <button
+                type="button"
                 className="bg-blue-500 text-white px-2 py-1 rounded-md hover:bg-blue-600 transition-colors "
                 onClick={() => {
                   sceneRef.current?.zoom(-0.2);
@@ -525,6 +536,7 @@ const GlobeVisualization = () => {
                 <Minus />
               </button>
               <button
+                type="button"
                 className="bg-blue-500 text-white px-2 py-1 rounded-md hover:bg-blue-600 transition-colors"
                 onClick={() => {
                   sceneRef.current?.zoom(0.2);
@@ -536,7 +548,18 @@ const GlobeVisualization = () => {
           </div>
         </div>
       </div>
+
       <div className="max-w-4xl mx-auto p-4 bg-white shadow-md rounded-lg mt-4 mb-8">
+        {results.length > 0 && (
+          <button
+            type="button"
+            onClick={quit}
+            disabled={isLoading || isWin}
+            className="bg-amber-300 text-white px-4 py-1 rounded-md  transition-colors disabled:opacity-50"
+          >
+            Rendirse
+          </button>
+        )}
         <table className="w-full">
           <thead>
             <tr>
@@ -548,7 +571,10 @@ const GlobeVisualization = () => {
           <tbody>
             {results.map((result, index) => (
               <tr key={index} className="border-t border-gray-300">
-                <td className="py-2">{inverseNamesMap.current[result.code]}</td>
+                <td className="py-2">
+                  {getPrefix(inverseNamesMap.current[result.code])}{' '}
+                  {inverseNamesMap.current[result.code]}
+                </td>
                 <td className="py-2">~{Math.floor(result.distance)} km</td>
                 <td className="py-2">
                   <div className="border-blue-500 border-2  p-1 rounded-md flex w-8 h-8 ">
